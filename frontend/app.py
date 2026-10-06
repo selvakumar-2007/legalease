@@ -81,7 +81,7 @@ if st.button("Generate Document"):
         """
         with st.spinner("Generating document..."):
             try:
-                model = genai.GenerativeModel('gemini-pro')
+                model = genai.GenerativeModel('gemini-2.0-flash')
                 response = model.generate_content(prompt)
                 
                 if response.text:
