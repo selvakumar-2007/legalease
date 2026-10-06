@@ -1,13 +1,19 @@
 from io import BytesIO
+import os
 from xml.sax.saxutils import escape
 
 import streamlit as st
-import requests
 from docx import Document
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
+import google.generativeai as genai
+
+# Setup Gemini API Direct-ah Streamlit-kulla
+api_key = os.getenv("GEMINI_API_KEY")
+if api_key:
+    genai.configure(api_key=api_key)
 
 
 def create_docx(document_text: str) -> bytes:
@@ -51,6 +57,7 @@ def create_pdf(document_text: str) -> bytes:
     pdf.build(content)
     return output.getvalue()
 
+
 st.set_page_config(page_title="LegalEase", layout="centered")
 st.title("LegalEase: AI Legal Document Generator")
 
@@ -60,35 +67,30 @@ terms = st.text_area("Terms & Conditions")
 dates = st.text_input("Effective Date")
 
 if st.button("Generate Document"):
-    payload = {
-        "document_type": document_type,
-        "parties": parties,
-        "terms": terms,
-        "dates": dates
-    }
-    with st.spinner("Generating document..."):
-        try:
-            res = requests.post("http://localhost:8000/generate", json=payload, timeout=60)
-            data = res.json() if res.content else {}
-
-            if res.status_code == 200 and "document" in data:
-                st.session_state["generated_doc"] = data["document"]
-                st.success("Document Generated Successfully!")
-            elif res.status_code == 429:
-                st.error(
-                    "Gemini API quota for this key/project is exhausted. "
-                    "Wait for the quota to reset, or use a key/project with available quota."
-                )
-            elif res.status_code == 401:
-                st.error(
-                    "The Gemini API key is invalid or unauthorized. Add a valid key "
-                    "to the project's .env file, then restart the backend."
-                )
-            else:
-                error_message = data.get("detail") or data.get("error") or "Error generating document"
-                st.error(f"Error generating document: {error_message}")
-        except requests.RequestException as e:
-            st.error(f"Failed to connect to backend: {e}")
+    if not api_key:
+        st.error("GEMINI_API_KEY environment variable is missing!")
+    else:
+        prompt = f"""
+        Generate a professional legal document with the following details:
+        - Document Type: {document_type}
+        - Parties Involved: {parties}
+        - Terms & Conditions: {terms}
+        - Effective Date: {dates}
+        
+        Please generate the entire formal document text clearly.
+        """
+        with st.spinner("Generating document..."):
+            try:
+                model = genai.GenerativeModel('gemini-1.5-flash')
+                response = model.generate_content(prompt)
+                
+                if response.text:
+                    st.session_state["generated_doc"] = response.text
+                    st.success("Document Generated Successfully!")
+                else:
+                    st.error("Failed to generate document. Please try again.")
+            except Exception as e:
+                st.error(f"Error generating document: {e}")
 
 if "generated_doc" in st.session_state:
     st.subheader("Generated Document")
